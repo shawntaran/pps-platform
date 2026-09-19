@@ -10,15 +10,15 @@ Companion doc: [consent-and-notice-draft.md](consent-and-notice-draft.md) (conse
 
 ## 0. Decisions I need before I write code
 
-| # | Decision | Who | My recommendation |
-|---|----------|-----|-------------------|
-| 1 | AWS region for "localized" storage; which LLM provider + region | Rahul | One region close to most students. LLM via an in-region/EU endpoint under a DPA with no-training and zero/short retention. |
-| 2 | Retention after graduation (grace period) | Lead | Graduation date + 6 months. Alumni can opt in to longer (fresh consent). |
-| 3 | Legal basis: explicit consent for everything, or consent + something else | Lead / [LEGAL] | Keep opt-in as requested; see risk R2. |
-| 4 | Which countries are the students in, and where do recruiters sit | Lead | Decides adequacy / SCCs, and whether local law (e.g. India's DPDP Act) applies on top of GDPR. |
-| 5 | Role list, and whether trainers may see identity data | Hemanth + Lead | Matrix in 2.4. |
-| 6 | "Encryption mechanism already established": what is it? | Lead / Rahul | I read it as AES-256 + AWS KMS. Please confirm. |
-| 7 | Source of truth for graduation date | Lead | Declared at signup; institution import overrides. |
+| # | Decision | Who | Status |
+|---|----------|-----|--------|
+| 1 | AWS region for "localized" storage; LLM provider + region | Rahul (unavailable) | **Open.** Also depends on #4. Built as config (`AWS_REGION`, `LLM_ENDPOINT`), so it doesn't block schema, crypto or PII work. Recommendation unchanged: one region close to most students; LLM via an in-region/EU endpoint under a DPA with no-training and zero/short retention. |
+| 2 | Retention after graduation (grace period) | Lead | **Decided: graduation date + 6 months.** Alumni can opt in to longer (fresh consent). |
+| 3 | Legal basis: explicit consent for everything, or consent + something else | Lead / [LEGAL] | **Open.** Keep opt-in as requested; see risk R2. |
+| 4 | Which countries are the students in, where do recruiters sit, which laws apply | Lead | **Open, being researched.** Decides adequacy / SCCs, and whether local law (e.g. India's DPDP Act) applies on top of GDPR. |
+| 5 | Trainer access to identity data | Lead (spec given) + Hemanth | **Decided: batch-scoped field allowlist, spec in 2.4.** Programme toggle kept but now defaults ON. My earlier student-consent gate is **withdrawn** — reasoning in 2.4. |
+| 6 | "Encryption mechanism already established": what is it? | Lead / Rahul | **Assumed AES-256 + AWS KMS**, behind a `KeyProvider` interface (KMS in AWS, a local key in dev/test) so nothing waits on AWS setup. Rahul confirms later. |
+| 7 | Source of truth for graduation date | Lead | **Mostly answered by the batch model:** `batches.graduation_date` is authoritative, with a per-user override for early leavers and a 12-month cap if there's no batch. Confirm. |
 
 ---
 
@@ -51,6 +51,9 @@ Companion doc: [consent-and-notice-draft.md](consent-and-notice-draft.md) (conse
 | Free-text summary | Unknown | Yes | Same redaction. May contain health/visa/etc. |
 | **File metadata** (author, company, revision history, embedded image EXIF) | Hidden PII | No | Strip on upload. Easy to forget. |
 | Derived: skills list, scores, issues, recommendations | Personal data (derived) | n/a | Keyed by pseudonymous ID. Scan LLM output for leaked PII. |
+| Submitted job description (JD) | Low, but reveals the student's targets | Yes (match scoring) | Keep with the analysis. Strip any recruiter contact details in it. |
+| Trainer comments / scores | **Personal data about the student, authored by staff** | n/a | Zone B, batch-scoped. Disclosable to the student on an access request (see 2.5, Q3). |
+| Password / auth data (hashes, MFA secrets, sessions, reset tokens) | Credentials | No | Argon2id hashes. Never returned by any API, to any role, including admin and DPO. Out of scope for every view in 2.4. |
 | Operational: IP, user agent, timestamps | Personal data | n/a | Minimise, short retention. |
 | Consent records | Personal data (accountability) | n/a | Append-only, minimal fields, retained longer (see 6). |
 
@@ -77,17 +80,46 @@ Companion doc: [consent-and-notice-draft.md](consent-and-notice-draft.md) (conse
 
 ### 2.4 Access matrix (proposal for Hemanth's RBAC)
 
-`own` = own records only. `(c)` = only with consent. `-` = none.
+`own` = own records only. `batch` = **only students in a batch the trainer is currently assigned to**. `(c)` = only with consent. `-` = none.
 
 | Data | Student | Trainer | Recruiter | Admin | DPO |
 |------|---------|---------|-----------|-------|-----|
-| Identity | own | **decision needed** | (c) per-request reveal | - (break-glass, audited) | via DSR, audited |
-| Original resume | own | **decision needed** | (c) | - | via DSR |
-| Analysis | own | assigned cohort | (c) card | aggregate only | via DSR |
-| Consent log | own | - | - | - | read all |
-| Access / audit log | own access history | - | - | read | read |
+| Name | own | batch | (c) per-request reveal | - (break-glass, audited) | via DSR, audited |
+| University / student ID | own | batch | - | manage | via DSR |
+| Institutional email | own | batch | (c) reveal | - (break-glass) | via DSR |
+| Personal email / phone / address | own | **-** | (c) reveal | - (break-glass) | via DSR |
+| Original resume + JD | own | batch | (c) | - | via DSR |
+| Submission status | own | batch | - | aggregate | via DSR |
+| ATS report / analysis | own | batch | (c) card | aggregate only | via DSR |
+| Trainer comments / scores | own (see Q3) | batch, own authored + co-trainers | - | - | via DSR |
+| Batch analytics | own position only | batch, **aggregated** | - | aggregate | - |
+| Other batches, any field | - | **-** | n/a | scoped | via DSR |
+| Account / profile beyond the list above | own | **-** | - | manage | via DSR |
+| Password / auth data | - | **-** | - | **-** | **-** |
+| Consent log | own | **-** | - | - | read all |
+| Access / audit log | own access history | **-** | - | read | read |
 
 Enforcement must be **server-side** (see R6).
+
+### 2.5 Trainer access model (per the lead's spec)
+
+**Principle:** trainers get identity data because academic review needs it, limited to the batch they're assigned to and to the fields that review actually uses. It's an allowlist, not "identity access on/off".
+
+- **Allowed fields:** student name, university/student ID, institutional email, submitted resume and JD, submission status, ATS report, trainer comments and scores.
+- **Denied:** passwords and auth data, account/profile fields outside that list, personal (non-institutional) contact details as *stored fields*, any student outside their batches, and system-wide consent/audit records.
+- **Resume contact details are visible in practice.** The trainer reviews the real document, so whatever contact details it contains are on screen. We therefore can't claim trainers don't see personal contact details. Two consequences: (1) the privacy notice must say so plainly; (2) it's the *stored, queryable, exportable* personal fields we withhold, which still limits bulk extraction. If you want the stronger version, we can show trainers a contact-masked render by default with a "reveal, and log it" button — more work, and it may hurt review quality, since formatting of the header block is itself part of an ATS critique. **My recommendation: don't mask; disclose instead.**
+- **Batch scoping is the security boundary**, enforced at three layers: a role check, a batch-membership check inside every query (not a filter the caller can pass), and Postgres RLS keyed to the trainer's current assignments as defence in depth. Assignments are time-bounded: when `revoked_at` is set, access stops, including for batches they used to teach.
+- **Batch analytics are aggregated** with small-cell suppression (hide any group under [5]) so an individual can't be reconstructed from filters. Individual rows only for their own batch.
+- **Everything is audit-logged**: who, which student, which field set, when, and why (the view/endpoint). Students see it in "Who saw my data".
+- **The programme toggle survives but flips to default ON.** It lets a programme run trainers in pseudonymous-only mode. Worth keeping while the countries/law question (#4) is open, in case a jurisdiction needs it. If you'd rather not carry the branch, say so and I'll drop it.
+
+**Correcting my earlier proposal:** I previously suggested student consent as a second gate on trainer access. **Withdraw that.** If trainer review is a core part of the programme, consent is the wrong legal basis — a student can't meaningfully refuse, which is the same "freely given" problem as R2, and one refusal would break the academic workflow. Trainer review should run on contract/legitimate interest, disclosed in the privacy notice, not on a consent checkbox. Consent stays for the genuinely optional things: recruiters, international transfer, extended retention.
+
+**Open questions on this:**
+- **Q1.** Can trainers download or export the resume and ATS report, or only view them in-app? Export is where batch scoping leaks. My recommendation: view in-app, watermarked, no bulk export; a single-file download logged separately.
+- **Q2.** Do co-trainers on the same batch see each other's comments and scores? The matrix assumes yes.
+- **Q3.** Can students see their own trainer comments and scores? **Note:** even if the institution treats them as internal notes, they're the student's personal data and are generally disclosable under an access request. Better to design them as student-visible than to promise trainers a privacy that won't hold. **[LEGAL]** if you want to argue an exemption.
+- **Q4.** Confirm "institutional email" exists as a separate field from personal email. If students sign up with a personal address, this distinction collapses and trainers see the personal one.
 
 ---
 
@@ -101,15 +133,29 @@ Your proposed split is right in spirit. Three changes:
 
 ```
 ZONE A: identity   (restricted role: app-identity, break-glass only for humans)
-  users(user_id PK, candidate_pid UNIQUE, name_enc, email_enc, email_bidx,
-        phone_enc, graduation_date, status, wrapped_dek, created_at)
+  users(user_id PK, candidate_pid UNIQUE, name_enc, student_ref_enc,
+        student_ref_bidx, inst_email_enc, inst_email_bidx, personal_email_enc,
+        personal_email_bidx, phone_enc, status, wrapped_dek, created_at)
+  batches(batch_id PK, name, programme, institution, starts_on, ends_on,
+          graduation_date, trainer_identity_access bool DEFAULT true)
+  batch_enrollments(user_id FK, batch_id FK, status, PK(user_id, batch_id))
+  trainer_assignments(trainer_id FK, batch_id FK, assigned_at,
+                      revoked_at NULL, PK(trainer_id, batch_id))
+  submissions(submission_id PK, user_id FK, batch_id FK, submission_pid UNIQUE,
+              jd_text, status, submitted_at)
   resumes(resume_id PK, user_id FK, resume_pid UNIQUE, s3_key, wrapped_dek,
           sha256, uploaded_at, expires_at)
 
+  -- auth lives apart from all of it; no role in 2.4 can read it
+  credentials(user_id FK, argon2id_hash, mfa_secret_enc, updated_at)
+
 ZONE B: analysis   (broader role; NO user_id, NO name/email/phone anywhere)
-  analyses(analysis_id PK, candidate_pid, resume_pid, skills, scores, issues,
-           recommendations, model_id, model_version, prompt_version,
-           redaction_version, created_at, expires_at)
+  analyses(analysis_id PK, candidate_pid, resume_pid, submission_pid, skills,
+           scores, issues, recommendations, model_id, model_version,
+           prompt_version, redaction_version, created_at, expires_at)
+  trainer_reviews(review_id PK, candidate_pid, analysis_id FK, batch_id,
+                  trainer_id, comments, score, created_at, updated_at,
+                  expires_at)
 
 ZONE C: compliance (append-only where noted)
   consent_records   (append-only)     -- detail in consent doc
@@ -118,6 +164,10 @@ ZONE C: compliance (append-only where noted)
   deletion_ledger(subject_hash, deleted_at)   -- replay after backup restore
   audit_log         (append-only)     -- next phase
 ```
+
+**How the trainer view crosses the zones — read this before implementing it.** A trainer screen shows the student's name next to their ATS report, which spans zone A and zone B. The wrong fix, and the one someone will reach for, is adding `user_id` or a name column to zone B; that destroys the separation permanently. The right one: a single authorised service resolves `user_id -> candidate_pid` in zone A after checking batch scope, queries zone B by `candidate_pid`, and joins in application memory. Zone B keeps no identity columns, and a leak of the analysis schema alone still yields no names. Same pattern for the recruiter card.
+
+**Graduation date now comes from `batches`, not the student.** That partly answers open decision #7: a batch-level date is authoritative, harder to game than a self-declared one, and it expires a whole cohort consistently. Keep a per-user override for students who leave early, and keep the 12-month hard cap for anyone with no batch.
 
 Isolation: same Postgres instance, separate schemas + roles + row-level security for the MVP. The design allows moving zone A to its own instance later if we need stronger blast-radius control.
 
@@ -155,9 +205,10 @@ KMS CMK (per env, per data class: identity-db / resume-files / logs / backups)
 
 | Data | Retention | Mechanism | Open |
 |------|-----------|-----------|------|
-| Account + identity | Graduation + 6 months | Scheduled job, reminder email T-30d | Grace length (#2) |
+| Account + identity | Graduation + 6 months (**decided**) | Scheduled job, reminder email T-30d | Length of the optional alumni extension (proposed 12 months) |
 | Original resume | Same, or immediately on user delete | Destroy per-user DEK, delete object | |
 | Analysis | Same as resume (linked) | Cascade on `candidate_pid` | Keep anonymised aggregates? |
+| Trainer comments / scores | Same as the analysis they attach to | Cascade on `candidate_pid` | Does the institution need to keep assessment records longer for academic purposes? If so they need their own basis and retention. |
 | Redacted text / prompts | Not persisted | Memory only. LLM provider zero-retention | Confirm provider terms |
 | Recruiter shares | Expire (e.g. 90 days) or on withdrawal | Expiring access grants | Recruiter contract terms |
 | Consent records | Withdrawal/deletion + N years, minimal fields | Kept as proof (Art. 17(3)(e)) | [LEGAL] N |
@@ -215,7 +266,7 @@ AI guardrails:
 | Data inventory | Done in section 2 (needs the group's sign-off). |
 | Consent & transparency | Drafted in the consent doc: screen, notice, purposes, retention, LLM disclosure, timestamp/version, withdrawal. |
 | Security: HTTPS | Infra (Rahul): ALB + ACM, HSTS. |
-| Security: auth, RBAC, backend authz | Hemanth + me. See R6. OIDC provider with MFA for recruiter/admin proposed. |
+| Security: auth, RBAC, backend authz | Hemanth + me. Role + batch scope + field allowlist in 2.4/2.5, enforced server-side (R6). OIDC with MFA for trainer/recruiter/admin proposed. |
 | Security: encryption, file storage, secrets | Section 4. |
 | Data lifecycle | Sections 5 and 7. |
 | User rights (view/correct/delete/export/restrict) | Schema supports it (`dsr_requests`); endpoints in the next phase. |
@@ -241,7 +292,9 @@ AI guardrails:
 
 ## 10. Build order after sign-off
 
-1. Schema + migrations (three zones), roles, RLS.
+Steps 1-3 don't depend on the open items (region, countries/law, legal basis): region is config, the crypto sits behind `KeyProvider`, and the PII pipeline is region-agnostic. Only the final notice wording and the recruiter/transfer parts of consent wait on #4.
+
+1. Schema + migrations (three zones), including batches, enrollments and trainer assignments; roles; RLS policies for batch scope.
 2. Crypto module (envelope encryption, blind index) + tests.
 3. PII pipeline + synthetic eval set/harness.
 4. Consent service (API, append-only log, policy versions).

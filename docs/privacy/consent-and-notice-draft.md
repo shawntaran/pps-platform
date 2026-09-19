@@ -24,7 +24,9 @@ Placeholders in `[BRACKETS]` need real values. **[LEGAL]** review is required be
 | `recruiter_visibility` | Show my profile to recruiters, without name or contact details | No | Not listed |
 | `recruiter_reveal` | Let recruiters request my contact details. I approve each request. | No | Requests blocked |
 | `intl_transfer` | Allow recruiters outside [REGION] to see my profile | No | Only recruiters inside [REGION] |
-| `alumni_retention` | Keep my data [12] months after graduation | No | Standard expiry applies |
+| `alumni_retention` | Keep my data [12] months after graduation | No | Standard expiry applies (graduation + 6 months) |
+
+**Trainer review is deliberately not a consent purpose.** An earlier draft had one; it's removed. Trainer review of your batch's work is part of the programme, so it runs on contract/legitimate interest and is *disclosed* in the notice rather than *asked* as a checkbox. Asking for consent we can't honour a "no" to would be misleading, and it's the same "freely given" problem as R2 in the notes. Scope and limits are in section 2.5 of the notes.
 
 `recruiter_reveal` is also asked again per request: "[Recruiter] from [Company] ([Country]) asks for your contact details", with allow/deny and an expiry.
 
@@ -41,7 +43,7 @@ Placeholders in `[BRACKETS]` need real values. **[LEGAL]** review is required be
 |  NEEDED TO ANALYSE YOUR RESUME                                     |
 |  [ ] 1. Analyse my resume                                          |
 |         We read it to find skills, gaps and tips. Kept until       |
-|         [6] months after you graduate.                [Details v]  |
+|         6 months after you graduate.                  [Details v]  |
 |  [ ] 2. Use an AI service                                          |
 |         Your resume text, with your name, email, phone, address    |
 |         and links removed, is sent to [PROVIDER] ([REGION]).       |
@@ -55,6 +57,11 @@ Placeholders in `[BRACKETS]` need real values. **[LEGAL]** review is required be
 |         Their country may have weaker data-protection rules.      |
 |         [What this means v]                                        |
 |  [ ] 6. Keep my data [12] months after graduation                  |
+|                                                                    |
+|  i  Your trainer reviews the work of their own batch, including    |
+|     your name, student ID and the resume you submit. This is       |
+|     part of the programme, not a choice. What they can and         |
+|     cannot see: [Details v]                                        |
 |                                                                    |
 |  Read the full privacy notice (v1.0)                               |
 |                                                                    |
@@ -97,6 +104,8 @@ Placeholders in `[BRACKETS]` need real values. **[LEGAL]** review is required be
 | `intl_transfer` | Profile hidden from recruiters outside [REGION]. |
 | `alumni_retention` | Standard graduation-based expiry applies from the original date. |
 
+Trainer access isn't in this table because it isn't consent-based. It ends when the trainer's batch assignment is revoked, when you leave the batch, or when your data expires.
+
 ## 6. Consent record model
 
 ```
@@ -122,8 +131,9 @@ Current state = latest row per (`subject_pid`, `purpose_code`, `scope`). Withdra
 **1. Who we are.** [ORG NAME] ("we") runs [PLATFORM] and decides why and how your data is used. Contact: [EMAIL]. Data Protection Officer: [DPO NAME/EMAIL].
 
 **2. What we collect.**
-- *Account:* name, email, graduation date, programme (phone optional).
-- *Your resume:* the file you upload and what we derive from it (skills, scores, issues, recommendations).
+- *Account:* name, institutional email, university/student ID, batch and programme, graduation date (personal email and phone optional).
+- *Your resume:* the file you upload, any job description you submit, and what we derive from them (skills, scores, issues, recommendations).
+- *Your trainer's feedback:* comments and scores your trainer records about your submitted work.
 - *Technical:* login events, IP address, timestamps, for security and to show you who accessed your data.
 - *What we deliberately don't keep:* photos, date of birth, gender, marital status, nationality, religion, government IDs, and referees' details. If your resume has them, we remove them automatically. Please leave them out.
 
@@ -135,6 +145,7 @@ Current state = latest row per (`subject_pid`, `purpose_code`, `scope`). Withdra
 | Process with an AI service (details removed first) | Your consent |
 | Show your profile to recruiters | Your consent |
 | Share your contact details with a recruiter you approve | Your consent, per request |
+| Let your trainer review your submitted work | Performance of our agreement with you / legitimate interests **[LEGAL: pick one]** |
 | Security, fraud prevention, audit logs | Legitimate interests |
 
 **4. Who receives it.**
@@ -144,10 +155,11 @@ Current state = latest row per (`subject_pid`, `purpose_code`, `scope`). Withdra
 | [CLOUD PROVIDER], [REGION] | Encrypted data | Hosting (processor) |
 | [AI PROVIDER], [REGION] | Resume text with name, contact details and links removed | Analysis (processor); they may not keep it or train on it |
 | Recruiters you allow | Your profile without name or contact details. Contact details only if you approve. | Recruiting. **They become responsible for their own copy** and we can't take it back. |
+| Your trainer (only trainers assigned to your batch) | Your name, student ID, institutional email, the resume and job description you submit, your submission status, your ATS report, and their own comments and scores. **Because they review the actual resume, any contact details you put in it are visible to them.** They cannot see your password, your wider account details, students in other batches, or the platform's consent and audit records. | Academic review and feedback |
 
 **5. Transfers outside [REGION].** Only if you consent to it (choice 5) or an adequacy decision / Standard Contractual Clauses apply. **[LEGAL]** Tell users the risks: the recipient's country may not offer equivalent protection.
 
-**6. How long we keep it.** Until [6] months after your graduation date, or [12] if you opt into extended retention, or sooner if you delete it or withdraw consent. Backups are cleared within [35] days. Consent records are kept [N] years as proof.
+**6. How long we keep it.** Until 6 months after your graduation date, or [12] months if you opt into extended retention, or sooner if you delete it or withdraw consent. Backups are cleared within [35] days. Consent records are kept [N] years as proof.
 
 **7. Automated analysis.** An algorithm scores your resume for structure, skills and ATS-compatibility. **It is guidance for you, not a hiring decision.** No decision about you with legal or similarly significant effect is made solely by automated means. [Trainer/human review: describe]. We record which model version produced each analysis.
 
@@ -162,8 +174,9 @@ Current state = latest row per (`subject_pid`, `purpose_code`, `scope`). Withdra
 ## 8. Open points for the team
 
 1. If a student declines `ai_processing`, do we offer a rules-only fallback, or is the feature simply unavailable?
-2. Grace period after graduation (6 months proposed).
+2. Length of the optional alumni extension (the grace period itself is decided: 6 months).
 3. Consent-proof retention period **[LEGAL]**.
 4. Languages the notice and consent screen must ship in.
 5. Are any students under 18? If so we need age handling and parental consent rules per country.
 6. DPO name/contact and the supervisory authority to name in the notice.
+7. Trainer questions Q1-Q4 in section 2.5 of the notes (export rights, co-trainer visibility, student visibility of comments, institutional vs personal email).
