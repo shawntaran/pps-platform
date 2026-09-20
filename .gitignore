@@ -1,0 +1,54 @@
+# --- Secrets: nothing here may ever reach git history ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+
+# --- Student data: uploaded resumes and anything derived ---
+uploads/
+storage/
+*.pdf
+*.docx
+*.doc
+!docs/**/*.pdf
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- Node ---
+node_modules/
+dist/
+build/
+
+# --- ML ---
+ml/datasets/*
+!ml/datasets/.gitkeep
+ml/models/*
+!ml/models/.gitkeep
+
+# --- Local infra ---
+docker-compose.override.yml
+*.db
+*.sqlite3
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
