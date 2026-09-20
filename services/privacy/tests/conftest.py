@@ -37,6 +37,27 @@ def _url() -> str | None:
     return os.environ.get("PPS_TEST_DATABASE_URL")
 
 
+def _drop_login(conn, login: str) -> None:
+    """Remove a test login role and everything that depends on it.
+
+    A plain DROP ROLE fails while the role still holds privileges -- CONNECT on
+    the database is enough. DROP OWNED BY revokes those first, and both
+    statements are guarded so this works whether or not the role exists.
+    """
+    conn.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') THEN
+                EXECUTE 'DROP OWNED BY {login}';
+                EXECUTE 'DROP ROLE {login}';
+            END IF;
+        END
+        $$
+        """
+    )
+
+
 requires_db = pytest.mark.skipif(
     _url() is None,
     reason="PPS_TEST_DATABASE_URL is not set; see tests/conftest.py",
@@ -79,7 +100,7 @@ def migrated_db(psycopg) -> Iterator[str]:
 
     with psycopg.connect(url, autocommit=True) as conn:
         for login, service_role in TEST_LOGINS.items():
-            conn.execute(f"DROP ROLE IF EXISTS {login}")
+            _drop_login(conn, login)
             conn.execute(f"CREATE ROLE {login} LOGIN PASSWORD '{TEST_PASSWORD}'")
             conn.execute(f"GRANT {service_role} TO {login}")
             conn.execute(f"GRANT CONNECT ON DATABASE {conn.info.dbname} TO {login}")
@@ -88,7 +109,7 @@ def migrated_db(psycopg) -> Iterator[str]:
 
     with psycopg.connect(url, autocommit=True) as conn:
         for login in TEST_LOGINS:
-            conn.execute(f"DROP ROLE IF EXISTS {login}")
+            _drop_login(conn, login)
 
 
 @pytest.fixture
