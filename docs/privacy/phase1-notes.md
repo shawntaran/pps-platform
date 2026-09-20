@@ -12,12 +12,12 @@ Companion doc: [consent-and-notice-draft.md](consent-and-notice-draft.md) (conse
 
 | # | Decision | Who | Status |
 |---|----------|-----|--------|
-| 1 | AWS region for "localized" storage; LLM provider + region | Rahul (unavailable) | **Open.** Also depends on #4. Built as config (`AWS_REGION`, `LLM_ENDPOINT`), so it doesn't block schema, crypto or PII work. Recommendation unchanged: one region close to most students; LLM via an in-region/EU endpoint under a DPA with no-training and zero/short retention. |
+| 1 | AWS region for "localized" storage; LLM provider + region | Rahul (unavailable) | **Proposed: ap-south-1 for storage, Bedrock ap-south-1 for inference.** Reasoning, tradeoffs and open verification items in [infra-residency-and-latency.md](infra-residency-and-latency.md) sections 3-4. Rahul to confirm or overrule. |
 | 2 | Retention after graduation (grace period) | Lead | **Decided: graduation date + 6 months.** Alumni can opt in to longer (fresh consent). |
 | 3 | Legal basis: explicit consent for everything, or consent + something else | Lead / [LEGAL] | **Open.** Keep opt-in as requested; see risk R2. |
-| 4 | Which countries are the students in, where do recruiters sit, which laws apply | Lead | **Open, being researched.** Decides adequacy / SCCs, and whether local law (e.g. India's DPDP Act) applies on top of GDPR. |
+| 4 | Which countries are the students in, where do recruiters sit, which laws apply | Lead | **Open, being researched.** Likely DPDP-governed for students, GDPR for EU recruiter contacts - which changes the legal basis for trainer review. See [infra-residency-and-latency.md](infra-residency-and-latency.md) section 2. |
 | 5 | Trainer access to identity data | Lead (spec given) + Hemanth | **Decided: batch-scoped field allowlist, spec in 2.4.** Programme toggle kept but now defaults ON. My earlier student-consent gate is **withdrawn** — reasoning in 2.4. |
-| 6 | "Encryption mechanism already established": what is it? | Lead / Rahul | **Assumed AES-256 + AWS KMS**, behind a `KeyProvider` interface (KMS in AWS, a local key in dev/test) so nothing waits on AWS setup. Rahul confirms later. |
+| 6 | "Encryption mechanism already established": what is it? | Lead / Rahul | **Spec written to AES-256-GCM + KMS envelope** behind a KeyProvider interface, so nothing waits on Rahul. See [infra-residency-and-latency.md](infra-residency-and-latency.md) section 5. |
 | 7 | Source of truth for graduation date | Lead | **Mostly answered by the batch model:** `batches.graduation_date` is authoritative, with a per-user override for early leavers and a 12-month cap if there's no batch. Confirm. |
 
 ---
