@@ -10,6 +10,9 @@ The GDPR/DPDP privacy guardrail layer. Design and reasoning live in
 | `src/pps_privacy/crypto/envelope.py` | AES-256-GCM, with every ciphertext bound to its row and column |
 | `src/pps_privacy/crypto/keyprovider.py` | Per-record data keys wrapped by KMS; local provider for dev |
 | `src/pps_privacy/crypto/blind_index.py` | Equality lookup on encrypted email and phone columns |
+| `src/pps_privacy/redaction/recognizers.py` | Validated pattern rules, including Aadhaar (Verhoeff-checked) and PAN |
+| `src/pps_privacy/redaction/known_values.py` | Exact-match scrub of the account holder own details: the high-recall layer |
+| `src/pps_privacy/redaction/pipeline.py` | Layer orchestration, overlap resolution, placeholder rewriting, output scan |
 | `migrations/` | The three-zone schema, roles, row-level security and grants |
 
 ## Setup
@@ -89,3 +92,23 @@ exists to catch exactly that.
 enforces authorisation itself. RLS means a missed check fails closed rather than
 returning a student, and `app.actor_id` / `app.actor_role` must be set with
 `SET LOCAL` from the verified session -- never from anything a caller supplies.
+
+## The redaction eval
+
+`tests/test_redaction_eval.py` is a recall gate, not a smoke test. It measures
+whether an identifier survived into the redacted output, and fails the build if
+any does. Run it with `-s` to see the per-entity table:
+
+```bash
+./.venv/Scripts/python.exe -m pytest tests/test_redaction_eval.py -q -s
+```
+
+It asserts in both directions. Recall must be 100%, because anything less means
+an identifier reached the model. Preservation must also be 100%, because a
+detector that redacts everything scores perfect recall and destroys the
+analysis the student came for.
+
+Passing is a regression gate on a small hand-built corpus, not evidence of
+real-world recall. Before launch this needs a larger generated corpus over real
+resume layouts -- multi-column PDFs, tables, scanned documents -- with numbers
+tracked over time. Read 100% as "no known regressions", never as "solved".
