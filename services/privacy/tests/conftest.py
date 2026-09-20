@@ -112,6 +112,71 @@ def migrated_db(psycopg) -> Iterator[str]:
             _drop_login(conn, login)
 
 
+def blob() -> bytes:
+    """Stand-in ciphertext for tests that are about access, not cryptography."""
+    return os.urandom(48)
+
+
+@pytest.fixture
+def seeded(connect_as) -> dict:
+    """One batch, two students, two trainers -- only one of them assigned.
+
+    The unassigned trainer is the control: if they can see the students, batch
+    scoping is not doing anything and the test proves nothing.
+
+    Shared between the raw-SQL schema tests and the access-layer tests, so both
+    assert against the same shape of data.
+    """
+    conn = connect_as("t_identity")
+    conn.execute("SET app.actor_role = 'system'")
+
+    def add_batch(name: str):
+        return conn.execute(
+            "INSERT INTO identity.batches (name, programme, institution, graduation_date) "
+            "VALUES (%s, 'CS', 'Example University', '2027-06-30') RETURNING batch_id",
+            (name,),
+        ).fetchone()[0]
+
+    def add_user(role: str):
+        return conn.execute(
+            "INSERT INTO identity.users (role, name_enc, wrapped_dek) "
+            "VALUES (%s, %s, %s) RETURNING user_id, candidate_pid",
+            (role, blob(), blob()),
+        ).fetchone()
+
+    batch = add_batch("B1")
+    other_batch = add_batch("B2")
+
+    student_rows = [add_user("student") for _ in range(2)]
+    trainer_row = add_user("trainer")
+    unassigned_row = add_user("trainer")
+    outsider_row = add_user("student")
+
+    for user_id, _ in student_rows:
+        conn.execute(
+            "INSERT INTO identity.batch_enrollments (user_id, batch_id) VALUES (%s, %s)",
+            (user_id, batch),
+        )
+    conn.execute(
+        "INSERT INTO identity.batch_enrollments (user_id, batch_id) VALUES (%s, %s)",
+        (outsider_row[0], other_batch),
+    )
+    conn.execute(
+        "INSERT INTO identity.trainer_assignments (trainer_id, batch_id) VALUES (%s, %s)",
+        (trainer_row[0], batch),
+    )
+
+    return {
+        "batch": batch,
+        "other_batch": other_batch,
+        "students": [r[0] for r in student_rows],
+        "student_pids": [r[1] for r in student_rows],
+        "trainer": trainer_row[0],
+        "unassigned_trainer": unassigned_row[0],
+        "outsider": outsider_row[0],
+    }
+
+
 @pytest.fixture
 def connect_as(migrated_db: str, psycopg):
     """Open a connection authenticated as one of the service login roles.

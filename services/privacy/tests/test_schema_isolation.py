@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Any
 
 import pytest
 
@@ -22,64 +21,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _blob() -> bytes:
-    """Stand-in ciphertext. These tests are about access, not cryptography."""
-    return os.urandom(48)
+def blob() -> bytes:
+    """Stand-in ciphertext. These tests are about access, not cryptography.
 
-
-@pytest.fixture
-def seeded(connect_as) -> dict[str, Any]:
-    """One batch, two students, two trainers -- only one of them assigned.
-
-    The second trainer is the control: if they can see the students, the batch
-    scope is not doing anything.
+    Duplicated from conftest rather than imported: pytest does not put the
+    tests directory on sys.path, so conftest helpers are not importable.
     """
-    conn = connect_as("t_identity")
-    conn.execute("SET app.actor_role = 'system'")
-
-    batch = conn.execute(
-        "INSERT INTO identity.batches (name, programme, institution, graduation_date) "
-        "VALUES ('B1', 'CS', 'Example University', '2027-06-30') RETURNING batch_id"
-    ).fetchone()[0]
-    other_batch = conn.execute(
-        "INSERT INTO identity.batches (name, programme, institution, graduation_date) "
-        "VALUES ('B2', 'CS', 'Example University', '2027-06-30') RETURNING batch_id"
-    ).fetchone()[0]
-
-    def add_user(role: str) -> uuid.UUID:
-        return conn.execute(
-            "INSERT INTO identity.users (role, name_enc, wrapped_dek) "
-            "VALUES (%s, %s, %s) RETURNING user_id",
-            (role, _blob(), _blob()),
-        ).fetchone()[0]
-
-    students = [add_user("student") for _ in range(2)]
-    trainer = add_user("trainer")
-    unassigned_trainer = add_user("trainer")
-    outsider = add_user("student")
-
-    for student in students:
-        conn.execute(
-            "INSERT INTO identity.batch_enrollments (user_id, batch_id) VALUES (%s, %s)",
-            (student, batch),
-        )
-    conn.execute(
-        "INSERT INTO identity.batch_enrollments (user_id, batch_id) VALUES (%s, %s)",
-        (outsider, other_batch),
-    )
-    conn.execute(
-        "INSERT INTO identity.trainer_assignments (trainer_id, batch_id) VALUES (%s, %s)",
-        (trainer, batch),
-    )
-
-    return {
-        "batch": batch,
-        "other_batch": other_batch,
-        "students": students,
-        "trainer": trainer,
-        "unassigned_trainer": unassigned_trainer,
-        "outsider": outsider,
-    }
+    return os.urandom(48)
 
 
 def _as(conn, actor_id, role: str):
@@ -259,13 +207,13 @@ def consent_row(connect_as, seeded) -> uuid.UUID:
     conn.execute(
         "INSERT INTO compliance.policy_versions (version, text_hash) "
         "VALUES ('v1.0', %s) ON CONFLICT DO NOTHING",
-        (_blob(),),
+        (blob(),),
     )
     return conn.execute(
         "INSERT INTO compliance.consent_records "
         "(subject_pid, purpose_code, action, policy_version, notice_hash) "
         "VALUES (%s, 'resume_analysis', 'granted', 'v1.0', %s) RETURNING consent_id",
-        (uuid.uuid4(), _blob()),
+        (uuid.uuid4(), blob()),
     ).fetchone()[0]
 
 
@@ -298,7 +246,7 @@ def test_withdrawal_is_a_new_row(connect_as, consent_row) -> None:
         "INSERT INTO compliance.consent_records "
         "(subject_pid, purpose_code, action, policy_version, notice_hash) "
         "VALUES (%s, 'resume_analysis', 'withdrawn', 'v1.0', %s)",
-        (subject, _blob()),
+        (subject, blob()),
     )
     rows = conn.execute(
         "SELECT action FROM compliance.consent_records "
