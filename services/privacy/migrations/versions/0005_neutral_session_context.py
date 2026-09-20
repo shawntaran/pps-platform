@@ -113,7 +113,7 @@ def upgrade() -> None:
 
     op.execute(
         """
-        CREATE FUNCTION app_context.actor_id() RETURNS uuid
+        CREATE OR REPLACE FUNCTION app_context.actor_id() RETURNS uuid
         LANGUAGE sql STABLE AS $$
             SELECT nullif(current_setting('app.actor_id', true), '')::uuid
         $$
@@ -121,7 +121,7 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE FUNCTION app_context.actor_role() RETURNS text
+        CREATE OR REPLACE FUNCTION app_context.actor_role() RETURNS text
         LANGUAGE sql STABLE AS $$
             SELECT coalesce(nullif(current_setting('app.actor_role', true), ''), 'anonymous')
         $$

@@ -82,8 +82,22 @@ def migrated_db(psycopg) -> Iterator[str]:
             pytest.skip(f"needs PostgreSQL 15+ for security_invoker views, got {version}")
 
         # Clean slate. Safe only because this must be a throwaway database.
-        for schema in ("identity", "analysis", "compliance"):
-            conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        #
+        # Discovered rather than hardcoded: an earlier version listed the three
+        # schemas by name, so when a migration added a fourth the reset silently
+        # stopped being a reset and the next run failed on an object that was
+        # never dropped. Anything a migration creates gets cleaned up here
+        # without this fixture having to know about it.
+        schemas = [
+            r[0]
+            for r in conn.execute(
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name NOT IN ('public', 'information_schema') "
+                "AND schema_name NOT LIKE 'pg\\_%'"
+            ).fetchall()
+        ]
+        for schema in schemas:
+            conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
         conn.execute("DROP TABLE IF EXISTS alembic_version")
 
     # Alembic wants the SQLAlchemy-style driver prefix.
