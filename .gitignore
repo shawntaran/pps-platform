@@ -42,6 +42,10 @@ ml/datasets/*
 ml/models/*
 !ml/models/.gitkeep
 
+# --- Local scratch and design exports (from develop) ---
+PPS APP_backup/
+stitch_export/
+
 # --- Local infra ---
 docker-compose.override.yml
 *.db
