@@ -1,0 +1,12 @@
+[theme]
+primaryColor    = "#315369"
+backgroundColor = "#f8f9fd"
+secondaryBackgroundColor = "#eceef2"
+textColor       = "#191c1f"
+font            = "sans serif"
+
+[server]
+maxUploadSize = 5
+
+[client]
+showSidebarNavigation = true
