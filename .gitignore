@@ -1,31 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.env
-
-# Node
 node_modules/
-dist/
-build/
-
-# IDE
-.vscode/
-
-# Data
-ml/datasets/*
-!ml/datasets/.gitkeep
-
-# Models
-ml/models/*
-!ml/models/.gitkeep
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Uploaded resumes / sensitive files
-uploads/
-*.pdf
-*.docx
+.venv/
+__pycache__/
+.env
+PPS APP_backup/
+stitch_export/
