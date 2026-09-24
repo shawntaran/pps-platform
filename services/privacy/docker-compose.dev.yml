@@ -1,0 +1,21 @@
+# Local PostgreSQL for development and tests. Not a deployment artefact.
+#
+# Data lives in tmpfs and disappears with the container: a dev database should
+# never accumulate a persistent copy of anything resembling student data.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pps
+      POSTGRES_PASSWORD: pps
+      POSTGRES_DB: pps_test
+    ports:
+      # 5433 so it cannot collide with a real local PostgreSQL on 5432.
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pps -d pps_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
