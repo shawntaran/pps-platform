@@ -24,30 +24,28 @@ const SignInPage = () => {
     setErrorMessage('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      try {
-        // Authenticate with claimed role vs demo account key
-        const authenticatedUser = login(selectedAccountKey, selectedRole);
-        setIsLoading(false);
+    try {
+      // Authenticate via FastAPI backend (async)
+      const authenticatedUser = await login(selectedAccountKey, selectedRole);
 
-        // Route to the appropriate dashboard based on authenticated role
-        if (authenticatedUser.role === 'student') {
-          navigate('/dashboard');
-        } else if (authenticatedUser.role === 'trainer') {
-          navigate('/trainer');
-        } else if (authenticatedUser.role === 'admin') {
-          navigate('/admin');
-        }
-      } catch (err) {
-        setIsLoading(false);
-        setErrorMessage(err.message || 'Authentication failed. Please check credentials.');
+      // Route to the appropriate dashboard based on authenticated role
+      if (authenticatedUser.role === 'student') {
+        navigate('/dashboard');
+      } else if (authenticatedUser.role === 'trainer') {
+        navigate('/trainer');
+      } else if (authenticatedUser.role === 'admin') {
+        navigate('/admin');
       }
-    }, 600);
+    } catch (err) {
+      setErrorMessage(err.message || 'Authentication failed. Please check credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
