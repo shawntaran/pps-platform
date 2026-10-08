@@ -91,42 +91,38 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('pps_current_report', JSON.stringify(currentReport));
   }, [currentReport]);
 
-  // ── Server-enforced authentication ─────────────────────────────────────
-  // Returns a Promise<user> on success; throws on any failure.
-  // NO client-side fallback — the backend is the single source of truth.
+  // ── Mock authentication (FastAPI backend not yet available) ────────────
+  // TODO: Replace this block with the real fetch call to /api/auth/login
+  // when the FastAPI backend is running. The rest of the app is unchanged.
   const login = async (accountKey, claimedRole) => {
-    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        account_key: accountKey,
-        claimed_role: claimedRole
-      })
-    });
+    // Simulate a short network delay so loading state is visible
+    await new Promise((resolve) => setTimeout(resolve, 600));
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(
-        errorData.detail || `Server Authorization Error (HTTP ${res.status})`
-      );
+    const authenticatedUser = USERS[accountKey];
+    if (!authenticatedUser) {
+      throw new Error('Unknown account. Please select a valid demo role.');
     }
 
-    const data = await res.json();
-    const authenticatedUser = data.user;
-    const token = data.token; // FastAPI returns a token
+    // Validate the claimed role matches the account
+    if (authenticatedUser.role !== claimedRole) {
+      throw new Error(`Role mismatch: account is ${authenticatedUser.role}, not ${claimedRole}.`);
+    }
+
+    // Generate a simple mock token
+    const token = `mock_token_${accountKey}_${Date.now()}`;
 
     setAuthToken(token);
     setCurrentUser(authenticatedUser);
     setActiveRoleView(authenticatedUser.role);
 
     addAuditLog({
-      event: `Server-verified login (${claimedRole.toUpperCase()})`,
+      event: `Mock login (${claimedRole.toUpperCase()})`,
       actor: `${authenticatedUser.name} (${authenticatedUser.id})`,
       result: "Success",
       category: "Auth"
     });
 
-    showToast(`Welcome back, ${authenticatedUser.name}! Authenticated via API.`);
+    showToast(`Welcome back, ${authenticatedUser.name}!`);
     return authenticatedUser;
   };
 
