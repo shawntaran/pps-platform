@@ -30,7 +30,19 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={<SignInPage />} />
+      {/* If already signed in and visiting /login, redirect to appropriate dashboard */}
+      <Route
+        path="/login"
+        element={
+          currentUser
+            ? <Navigate to={
+                currentUser.role === 'trainer' ? '/trainer'
+                : currentUser.role === 'admin' ? '/admin'
+                : '/dashboard'
+              } replace />
+            : <SignInPage />
+        }
+      />
       
       <Route
         path="/"
@@ -40,7 +52,11 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={
+          currentUser?.role === 'trainer' ? <Navigate to="/trainer" replace />
+          : currentUser?.role === 'admin' ? <Navigate to="/admin" replace />
+          : <Navigate to="/dashboard" replace />
+        } />
         <Route path="dashboard" element={<StudentDashboardPage />} />
         <Route path="resume-review" element={<ResumeReviewPage />} />
         <Route path="history" element={<StudentHistoryPage />} />
@@ -64,7 +80,16 @@ function AppRoutes() {
         <Route path="admin/engine" element={<AdminConsolePage />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Catch-all: send unauthenticated to login, authenticated to dashboard */}
+      <Route path="*" element={
+        currentUser
+          ? <Navigate to={
+              currentUser.role === 'trainer' ? '/trainer'
+              : currentUser.role === 'admin' ? '/admin'
+              : '/dashboard'
+            } replace />
+          : <Navigate to="/login" replace />
+      } />
     </Routes>
   );
 }

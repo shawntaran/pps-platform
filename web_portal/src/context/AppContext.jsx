@@ -12,13 +12,29 @@ import {
 
 const AppContext = createContext();
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Read from Vite env; falls back to localhost:8000 for local dev
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
 export const AppProvider = ({ children }) => {
-  // Current authenticated user (default to student Aarav Mehta)
+  // ── Authenticated user — null means "not signed in" ────────────────────
+  const [authToken, setAuthToken] = useState(() => {
+    return localStorage.getItem('pps_token') || null;
+  });
+
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('pps_user');
-    return saved ? JSON.parse(saved) : USERS.student;
+    try {
+      const saved = localStorage.getItem('pps_user');
+      const token = localStorage.getItem('pps_token');
+      // Only restore if we have both a user object AND a valid token
+      if (saved && saved !== 'null' && token) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id && parsed.role) return parsed;
+      }
+    } catch { /* corrupt storage — ignore */ }
+    // If no token or invalid user, clear any old fake sessions
+    localStorage.removeItem('pps_user');
+    localStorage.removeItem('pps_token');
+    return null;
   });
 
   // Active role view for demo testing (student / trainer / admin)
@@ -56,9 +72,16 @@ export const AppProvider = ({ children }) => {
     }, 4000);
   };
 
+  // Persist user to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('pps_user', JSON.stringify(currentUser));
-  }, [currentUser]);
+    if (currentUser && authToken) {
+      localStorage.setItem('pps_user', JSON.stringify(currentUser));
+      localStorage.setItem('pps_token', authToken);
+    } else {
+      localStorage.removeItem('pps_user');
+      localStorage.removeItem('pps_token');
+    }
+  }, [currentUser, authToken]);
 
   useEffect(() => {
     localStorage.setItem('pps_submissions', JSON.stringify(submissions));
@@ -68,73 +91,57 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('pps_current_report', JSON.stringify(currentReport));
   }, [currentReport]);
 
-  // Server-enforced Authentication method
+  // ── Server-enforced authentication ─────────────────────────────────────
+  // Returns a Promise<user> on success; throws on any failure.
+  // NO client-side fallback — the backend is the single source of truth.
   const login = async (accountKey, claimedRole) => {
-    try {
-      // First attempt real FastAPI backend authentication
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_key: accountKey,
-          claimed_role: claimedRole
-        })
-      });
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account_key: accountKey,
+        claimed_role: claimedRole
+      })
+    });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Server Authorization Error (HTTP ${res.status})`);
-      }
-
-      const data = await res.json();
-      const authenticatedUser = data.user;
-
-      setCurrentUser(authenticatedUser);
-      setActiveRoleView(authenticatedUser.role);
-      
-      addAuditLog({
-        event: `Server-verified login (${claimedRole.toUpperCase()})`,
-        actor: `${authenticatedUser.name} (${authenticatedUser.id})`,
-        result: "Success",
-        category: "Auth"
-      });
-
-      showToast(`Welcome back, ${authenticatedUser.name}! Authenticated via API.`);
-      return authenticatedUser;
-    } catch (err) {
-      // If server is unreachable or returned explicit 403 Forbidden, check if it was a permission error
-      if (err.message && err.message.includes('Access Denied')) {
-        throw err;
-      }
-      
-      // Fallback local RBAC check if backend is offline
-      const user = USERS[accountKey];
-      if (!user) {
-        throw new Error(`No demo account found for '${accountKey}'.`);
-      }
-
-      if (user.role !== claimedRole) {
-        throw new Error(
-          `Access Denied: Account '${user.name}' is registered as '${user.role}', not '${claimedRole}'.`
-        );
-      }
-
-      setCurrentUser(user);
-      setActiveRoleView(user.role);
-      showToast(`Welcome back, ${user.name}! Authenticated as ${user.role}.`);
-      return user;
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `Server Authorization Error (HTTP ${res.status})`
+      );
     }
-  };
 
-  const logout = () => {
+    const data = await res.json();
+    const authenticatedUser = data.user;
+    const token = data.token; // FastAPI returns a token
+
+    setAuthToken(token);
+    setCurrentUser(authenticatedUser);
+    setActiveRoleView(authenticatedUser.role);
+
     addAuditLog({
-      event: "User sign-out session ended",
-      actor: `${currentUser.name} (${currentUser.id})`,
+      event: `Server-verified login (${claimedRole.toUpperCase()})`,
+      actor: `${authenticatedUser.name} (${authenticatedUser.id})`,
       result: "Success",
       category: "Auth"
     });
-    setCurrentUser(null);
-    localStorage.removeItem('pps_user');
+
+    showToast(`Welcome back, ${authenticatedUser.name}! Authenticated via API.`);
+    return authenticatedUser;
+  };
+
+  const logout = () => {
+    if (currentUser) {
+      addAuditLog({
+        event: "User sign-out session ended",
+        actor: `${currentUser.name} (${currentUser.id})`,
+        result: "Success",
+        category: "Auth"
+      });
+    }
+    setAuthToken(null);
+    setCurrentUser(null);       // triggers useEffect which removes from localStorage
+    setActiveRoleView('student');
   };
 
   const switchRoleView = (role) => {
